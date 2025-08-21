@@ -1,0 +1,124 @@
+ 
+name: CI/CD Pipeline Front-1
+
+on:
+  push:
+    branches: [ feature/ci-cd, main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-build-scan-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    # ÉTAPE 1: TESTS
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run tests
+      run: npm test -- --coverage --watchAll=false
+      
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-front-1
+        path: coverage/
+    
+    # ÉTAPE 2: BUILD
+    - name: Build application
+      run: npm run build
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts-front-1
+        path: build/
+    
+    # ÉTAPE 3: BUILD DOCKER IMAGE
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Build Docker image
+      run: |
+        docker build -t simplon-finance4all-front-1:${{ github.sha }} .
+        docker tag simplon-finance4all-front-1:${{ github.sha }} simplon-finance4all-front-1:latest
+    
+    # ÉTAPE 4: TRIVY SECURITY SCAN
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: simplon-finance4all-front-1:latest
+        format: 'sarif'
+        output: 'trivy-results-front-1.sarif'
+    
+    - name: Upload Trivy scan results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: trivy-scan-results-front-1
+        path: trivy-results-front-1.sarif
+    
+    # ÉTAPE 5: SONARQUBE ANALYSIS
+    - name: SonarQube Scan
+      uses: sonarqube-quality-gate-action@master
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      with:
+        scanMetadataReportFile: target/sonar/report-task.txt
+    
+    - name: SonarQube Quality Gate check
+      id: sonarqube-quality-gate-check
+      uses: sonarqube-quality-gate-action@master
+      timeout-minutes: 5
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+    
+    # ÉTAPE 6: PUSH TO DOCKER HUB
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    - name: Push to Docker Hub
+      run: |
+        docker tag simplon-finance4all-front-1:latest ${{ secrets.DOCKERHUB_USERNAME }}/simplon-finance4all-front-1:latest
+        docker tag simplon-finance4all-front-1:latest ${{ secrets.DOCKERHUB_USERNAME }}/simplon-finance4all-front-1:${{ github.sha }}
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/simplon-finance4all-front-1:latest
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/simplon-finance4all-front-1:${{ github.sha }}
+    
+    # ÉTAPE 7: DEPLOY TO NEXUS
+    - name: Upload artifacts to Nexus Repository
+      run: |
+        # Créer un package tar.gz des artifacts de build
+        tar -czf simplon-finance4all-front-1-${{ github.sha }}.tar.gz -C build .
+        
+        # Upload vers Nexus
+        curl -v -u "${{ secrets.NEXUS_USERNAME }}:${{ secrets.NEXUS_PASSWORD }}" \
+          --upload-file simplon-finance4all-front-1-${{ github.sha }}.tar.gz \
+          "${{ secrets.NEXUS_URL }}/repository/simplon-finance4all-front-1/com/simplon/finance4all-front-1/${{ github.sha }}/simplon-finance4all-front-1-${{ github.sha }}.tar.gz"
+    
+    # ÉTAPE 8: NOTIFICATION ET RÉSUMÉ
+    - name: Pipeline Summary
+      run: |
+        echo "## 🚀 Pipeline CI/CD Results - simplon-finance4all-front-1" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Tests executed and coverage generated" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Application built successfully" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Docker image created: simplon-finance4all-front-1:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Security scan completed with Trivy" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Code quality analysis with SonarQube" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Image pushed to Docker Hub" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Artifacts deployed to Nexus Repository" >> $GITHUB_STEP_SUMMARY
