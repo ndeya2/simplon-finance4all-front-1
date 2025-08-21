@@ -69,23 +69,20 @@ jobs:
         name: trivy-scan-results-front-1
         path: trivy-results-front-1.sarif
     
-    # ÉTAPE 5: SONARQUBE ANALYSIS
+     # ÉTAPE 5: SONARQUBE ANALYSIS
     - name: SonarQube Scan
-      uses: sonarqube-quality-gate-action@master
+      uses: sonarsource/sonarqube-scan-action@master
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      with:
-        scanMetadataReportFile: target/sonar/report-task.txt
     
     - name: SonarQube Quality Gate check
       id: sonarqube-quality-gate-check
-      uses: sonarqube-quality-gate-action@master
+      uses: sonarsource/sonarqube-quality-gate-action@master
       timeout-minutes: 5
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-    
     # ÉTAPE 6: PUSH TO DOCKER HUB
     - name: Login to Docker Hub
       uses: docker/login-action@v3
