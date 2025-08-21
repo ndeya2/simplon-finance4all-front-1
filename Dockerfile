@@ -24,8 +24,8 @@ FROM nginx:alpine AS production-stage-front-1
 # Copier la configuration nginx personnalisée
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copier les fichiers build depuis l'étape précédente
-COPY --from=build-stage-front-1 /app/build /usr/share/nginx/html
+# Copier les fichiers build depuis l'étape précédente (Vite génère dans dist/)
+COPY --from=build-stage-front-1 /app/dist /usr/share/nginx/html
 
 # Exposer le port 80
 EXPOSE 80
@@ -37,4 +37,4 @@ LABEL version="1.0"
 LABEL description="Frontend application for Finance4All - Simplon project"
 
 # Démarrer nginx
-CMD ["nginx", "-g", "daemon off;"] 
+CMD ["nginx", "-g", "daemon off;"]
