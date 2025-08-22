@@ -130,6 +130,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify SonarQube Token
+        run: |
+          if [ -z "${{ secrets.SONAR_TOKEN }}" ]; then
+            echo "❌ SONAR_TOKEN secret is not configured"
+            echo "Please add SONAR_TOKEN to your GitHub repository secrets"
+            exit 1
+          else
+            echo "✅ SONAR_TOKEN is configured"
+          fi
+
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@master
         env:
@@ -171,26 +181,48 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/ci-cd'
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Verify Docker Hub Credentials
+        run: |
+          if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ] || [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "❌ Docker Hub credentials are not configured"
+            echo "Please add DOCKERHUB_USERNAME and DOCKERHUB_TOKEN to your GitHub repository secrets"
+            exit 1
+          else
+            echo "✅ Docker Hub credentials are configured"
+          fi
+
       - uses: actions/download-artifact@v4
         with:
           name: docker-image-front-1-${{ github.run_number }}
+      
       - uses: actions/download-artifact@v4
         with:
           name: build-artifacts-front-1-${{ github.run_number }}
           path: dist/
+      
       - run: gunzip -c docker-image-front-1.tar.gz | docker load
-      - uses: docker/login-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - run: |
+      
+      - name: Push Docker Images
+        run: |
           VERSION_TAG=$(date +%Y%m%d)-${GITHUB_SHA::8}
+          echo "🏷️ Tagging images..."
           docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
           docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${VERSION_TAG}
           docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+          
+          echo "🚀 Pushing images to Docker Hub..."
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${VERSION_TAG}
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+          
+          echo "✅ Successfully pushed all images!"
 
   # ==========================================
   # JOB 7: NOTIFICATION ET RÉSUMÉ
@@ -216,3 +248,9 @@ jobs:
           echo "- Build artifacts (dist/)" >> $GITHUB_STEP_SUMMARY
           echo "- Docker image: ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- Security scan results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 Configuration Required:" >> $GITHUB_STEP_SUMMARY
+          echo "Make sure these secrets are configured in GitHub:" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔑 SONAR_TOKEN (for code quality analysis)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🐳 DOCKERHUB_USERNAME (for Docker registry)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🐳 DOCKERHUB_TOKEN (for Docker registry)" >> $GITHUB_STEP_SUMMARY
