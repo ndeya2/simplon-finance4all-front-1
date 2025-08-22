@@ -156,7 +156,7 @@ jobs:
         path: trivy-results-front-1.sarif
         retention-days: 30
 
-  # ==========================================
+    # ==========================================
   # JOB 5: QUALITY ANALYSIS (SIMPLIFIÉ)
   # ==========================================
   quality-analysis-front-1:
@@ -191,7 +191,6 @@ jobs:
           -Dsonar.projectKey=simplon-finance4all-front-1
           -Dsonar.sources=src
           -Dsonar.host.url=${{ env.SONAR_HOST_URL }}
-          -Dsonar.token=${{ secrets.SONAR_TOKEN }}
           -Dsonar.projectName="Finance4All Front-1"
           -Dsonar.projectVersion=1.0.0
 
@@ -202,17 +201,6 @@ jobs:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
       continue-on-error: true
-      
-    - name: Generate Analysis Report
-      if: always()
-      run: |
-        echo "## 📊 SonarQube Analysis Report" >> $GITHUB_STEP_SUMMARY
-        echo "**Project:** simplon-finance4all-front-1" >> $GITHUB_STEP_SUMMARY
-        echo "**Server:** ${{ env.SONAR_HOST_URL }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "🔗 [View Results](${{ env.SONAR_HOST_URL }}/dashboard?id=simplon-finance4all-front-1)" >> $GITHUB_STEP_SUMMARY
 
   # ==========================================
   # JOB 6: DEPLOY TO REGISTRIES
