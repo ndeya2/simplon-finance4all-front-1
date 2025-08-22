@@ -157,7 +157,7 @@ jobs:
         retention-days: 30
 
   # ==========================================
-  # JOB 5: QUALITY ANALYSIS (CORRIGÉ)
+  # JOB 5: QUALITY ANALYSIS (SIMPLIFIÉ)
   # ==========================================
   quality-analysis-front-1:
     name: "Code Quality"
@@ -169,7 +169,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Shallow clones should be disabled for better analysis
+        fetch-depth: 0
         
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -179,178 +179,7 @@ jobs:
 
     - name: Install dependencies
       run: npm ci
-    
-    - name: Create sonar-project.properties if not exists
-      run: |
-        if [ ! -f sonar-project.properties ]; then
-          echo "Creating sonar-project.properties..."
-          cat > sonar-project.properties << EOF
-        # Configuration SonarQube pour Finance4All Front-1
-        sonar.projectKey=simplon-finance4all-front-1
-        sonar.organization=simplon-finance4all
-        sonar.projectName=Finance4All Front-1
-        sonar.projectVersion=1.0.0
-        
-        # Sources et exclusions
-        sonar.sources=src
-        sonar.exclusions=**/*.test.js,**/*.test.ts,**/node_modules/**,**/dist/**,**/*.spec.js,**/*.spec.ts,**/*.config.js,**/*.config.ts,**/public/**
-        
-        # Tests et coverage
-        sonar.tests=src
-        sonar.test.inclusions=**/*.test.js,**/*.test.ts,**/*.spec.js,**/*.spec.ts
-        sonar.javascript.lcov.reportPaths=coverage/lcov.info
-        sonar.typescript.lcov.reportPaths=coverage/lcov.info
-        
-        # Configuration TypeScript/JavaScript
-        sonar.typescript.node.maxspace=4096
-        
-        # Host URL
-        sonar.host.url=${{ env.SONAR_HOST_URL }}
-        
-        # Encodage
-        sonar.sourceEncoding=UTF-8
-        
-        # Duplication
-        sonar.cpd.exclusions=**/*.test.js,**/*.test.ts,**/*.spec.js,**/*.spec.ts
-        EOF
-        else
-          echo "✅ sonar-project.properties already exists"
-        fi
-        
-        echo "📄 Current sonar-project.properties content:"
-        cat sonar-project.properties
-    
-    # ✅ ÉTAPE CORRIGÉE : Vérification préalable des secrets
-    - name: Check required secrets
-      run: |
-        echo "🔍 Checking required secrets..."
-        
-        # Vérifier si SONAR_TOKEN existe
-        if [ -z "${{ secrets.SONAR_TOKEN }}" ]; then
-          echo "❌ ERREUR: SONAR_TOKEN n'est pas configuré dans les secrets GitHub"
-          echo "📋 Actions requises:"
-          echo "1. Allez sur http://161.97.89.159:9000"
-          echo "2. Connectez-vous et générez un token utilisateur"
-          echo "3. Dans GitHub: Settings → Secrets → New repository secret"
-          echo "4. Nom: SONAR_TOKEN, Valeur: votre_token"
-          echo ""
-          echo "⚠️ Arrêt du job - Secret manquant"
-          exit 1
-        else
-          echo "✅ SONAR_TOKEN est configuré"
-        fi
-        
-        # Vérifier la longueur du token (les tokens SonarQube sont généralement longs)
-        TOKEN_LENGTH=${#SONAR_TOKEN}
-        if [ $TOKEN_LENGTH -lt 20 ]; then
-          echo "⚠️ WARNING: Token semble trop court (longueur: $TOKEN_LENGTH)"
-        else
-          echo "✅ Token semble valide (longueur: $TOKEN_LENGTH caractères)"
-        fi
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-    
-    - name: Debug SonarQube Connection
-      run: |
-        echo "🔍 === SonarQube Connection Debug ==="
-        echo "Server URL: ${{ env.SONAR_HOST_URL }}"
-        echo "Timestamp: $(date)"
-        echo "GitHub Actor: ${{ github.actor }}"
-        echo "Branch: ${{ github.ref_name }}"
-        echo ""
-        
-        # Test server accessibility
-        echo "1️⃣ Testing server accessibility..."
-        if curl -s --connect-timeout 10 --max-time 30 "${{ env.SONAR_HOST_URL }}/api/system/status"; then
-          echo ""
-          echo "✅ Server is accessible"
-        else
-          echo ""
-          echo "❌ Server is not accessible"
-          echo "Possible causes:"
-          echo "- Network firewall blocking GitHub Actions"
-          echo "- Server temporarily down"
-          echo "- URL incorrect"
-          echo ""
-          echo "🔄 Trying with different timeout..."
-          curl -v --connect-timeout 30 --max-time 60 "${{ env.SONAR_HOST_URL }}/api/system/status" || true
-        fi
-        echo ""
-        
-        # Check token configuration
-        echo "2️⃣ Checking token configuration..."
-        if [ -n "$SONAR_TOKEN" ]; then
-          echo "✅ SONAR_TOKEN is set (length: ${#SONAR_TOKEN})"
-          echo "Token prefix: ${SONAR_TOKEN:0:10}..."
-          
-          # Masquer le token dans les logs
-          export MASKED_TOKEN="${SONAR_TOKEN:0:6}***${SONAR_TOKEN: -4}"
-          echo "Masked token: $MASKED_TOKEN"
-        else
-          echo "❌ SONAR_TOKEN is not set"
-          exit 1
-        fi
-        echo ""
-        
-        # Test authentication
-        echo "3️⃣ Testing authentication..."
-        AUTH_RESPONSE=$(curl -s -w "%{http_code}" --connect-timeout 30 --max-time 60 \
-          -u "${SONAR_TOKEN}:" \
-          "${{ env.SONAR_HOST_URL }}/api/authentication/validate" 2>/dev/null || echo "000")
-        
-        if [ ${#AUTH_RESPONSE} -ge 3 ]; then
-          HTTP_CODE="${AUTH_RESPONSE: -3}"
-          RESPONSE_BODY="${AUTH_RESPONSE%???}"
-          
-          echo "HTTP Status Code: $HTTP_CODE"
-          echo "Response: $RESPONSE_BODY"
-          
-          case $HTTP_CODE in
-            200)
-              echo "✅ Authentication successful"
-              ;;
-            401)
-              echo "❌ Authentication failed - Invalid token"
-              echo "Vérifiez que le token est correct et n'a pas expiré"
-              ;;
-            403)
-              echo "❌ Authentication failed - Insufficient permissions"
-              echo "Vérifiez les permissions du token dans SonarQube"
-              ;;
-            *)
-              echo "⚠️ Unexpected HTTP code: $HTTP_CODE"
-              ;;
-          esac
-        else
-          echo "❌ Failed to connect to server"
-          echo "Response: $AUTH_RESPONSE"
-        fi
-        echo ""
-        
-        # Test server version and info
-        echo "4️⃣ Getting server information..."
-        if [ "$HTTP_CODE" = "200" ] 2>/dev/null; then
-          VERSION_RESPONSE=$(curl -s --connect-timeout 30 --max-time 60 \
-            -u "${SONAR_TOKEN}:" \
-            "${{ env.SONAR_HOST_URL }}/api/server/version" 2>/dev/null || echo "Failed to get version")
-          echo "Server version: $VERSION_RESPONSE"
-          
-          # Test project permissions
-          PROJECT_RESPONSE=$(curl -s --connect-timeout 30 --max-time 60 \
-            -u "${SONAR_TOKEN}:" \
-            "${{ env.SONAR_HOST_URL }}/api/projects/search?projects=simplon-finance4all-front-1" 2>/dev/null || echo "Failed to check project")
-          echo "Project check: $PROJECT_RESPONSE"
-        else
-          echo "⚠️ Skipping server info due to authentication failure"
-        fi
-        echo ""
-        
-        echo "🏁 Debug completed"
-        
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        
-    # ✅ SCAN SONARQUBE AMÉLIORÉ
+
     - name: SonarQube Scan
       uses: sonarsource/sonarqube-scan-action@master
       env:
@@ -365,7 +194,7 @@ jobs:
           -Dsonar.token=${{ secrets.SONAR_TOKEN }}
           -Dsonar.projectName="Finance4All Front-1"
           -Dsonar.projectVersion=1.0.0
-    
+
     - name: SonarQube Quality Gate check
       uses: sonarsource/sonarqube-quality-gate-action@master
       timeout-minutes: 5
@@ -374,12 +203,10 @@ jobs:
         SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
       continue-on-error: true
       
-    # ✅ RAPPORT D'ANALYSE AJOUTÉ
     - name: Generate Analysis Report
       if: always()
       run: |
         echo "## 📊 SonarQube Analysis Report" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Project:** simplon-finance4all-front-1" >> $GITHUB_STEP_SUMMARY
         echo "**Server:** ${{ env.SONAR_HOST_URL }}" >> $GITHUB_STEP_SUMMARY
         echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
@@ -388,7 +215,7 @@ jobs:
         echo "🔗 [View Results](${{ env.SONAR_HOST_URL }}/dashboard?id=simplon-finance4all-front-1)" >> $GITHUB_STEP_SUMMARY
 
   # ==========================================
-  # JOB 6: DEPLOY TO REGISTRIES (Amélioré)
+  # JOB 6: DEPLOY TO REGISTRIES
   # ==========================================
   deploy-registries-front-1:
     name: "Deploy to Registries"
@@ -414,8 +241,7 @@ jobs:
     - name: Load Docker image
       run: |
         gunzip -c docker-image-front-1.tar.gz | docker load
-    
-    # ✅ DOCKER HUB DEPLOYMENT AMÉLIORÉ
+
     - name: Login to Docker Hub
       uses: docker/login-action@v3
       continue-on-error: true
@@ -426,74 +252,23 @@ jobs:
     - name: Push to Docker Hub
       continue-on-error: true
       run: |
-        # Vérifier si les secrets Docker Hub sont configurés
         if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ] || [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
           echo "⚠️ Docker Hub secrets not configured, skipping push"
           exit 0
         fi
         
-        # Generate version tag
         VERSION_TAG=$(date +%Y%m%d)-${GITHUB_SHA::8}
         
-        # Tag images
         docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
         docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${VERSION_TAG}
         docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
         
-        # Push images
         docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
         docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${VERSION_TAG}
         docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
-        
-        echo "🐳 Docker images pushed:"
-        echo "- latest"
-        echo "- ${VERSION_TAG}"
-        echo "- ${{ github.sha }}"
-    
-    # ✅ NEXUS DEPLOYMENT AMÉLIORÉ
-    - name: Upload artifacts to Nexus Repository
-      continue-on-error: true
-      run: |
-        # Vérifier si les secrets Nexus sont configurés
-        if [ -z "${{ secrets.NEXUS_USERNAME }}" ] || [ -z "${{ secrets.NEXUS_PASSWORD }}" ]; then
-          echo "⚠️ Nexus secrets not configured, skipping upload"
-          exit 0
-        fi
-        
-        # Create artifact package
-        tar -czf ${{ env.DOCKER_IMAGE_NAME }}-${{ github.sha }}.tar.gz -C dist .
-        
-        # Generate version info
-        VERSION_TAG=$(date +%Y%m%d)-${GITHUB_SHA::8}
-        
-        # Debug info
-        echo "📦 Nexus deployment info:"
-        echo "Archive: ${{ env.DOCKER_IMAGE_NAME }}-${{ github.sha }}.tar.gz"
-        echo "Size: $(ls -lh ${{ env.DOCKER_IMAGE_NAME }}-${{ github.sha }}.tar.gz)"
-        echo "Version: ${VERSION_TAG}"
-        
-        # Upload to Nexus
-        NEXUS_BASE_URL="http://161.97.89.159:8081"
-        UPLOAD_URL="${NEXUS_BASE_URL}/repository/simplon-finance4all-front-1/com/simplon/finance4all-front-1/${VERSION_TAG}/${{ env.DOCKER_IMAGE_NAME }}-${VERSION_TAG}.tar.gz"
-        
-        echo "Upload URL: ${UPLOAD_URL}"
-        
-        # Rename file with version
-        cp ${{ env.DOCKER_IMAGE_NAME }}-${{ github.sha }}.tar.gz ${{ env.DOCKER_IMAGE_NAME }}-${VERSION_TAG}.tar.gz
-        
-        # Upload to Nexus with better error handling
-        if curl -v --fail -u "${{ secrets.NEXUS_USERNAME }}:${{ secrets.NEXUS_PASSWORD }}" \
-          --upload-file ${{ env.DOCKER_IMAGE_NAME }}-${VERSION_TAG}.tar.gz \
-          "${UPLOAD_URL}"; then
-          echo "✅ Artifact uploaded successfully to Nexus"
-        else
-          echo "❌ Nexus upload failed, but continuing..."
-        fi
-        
-        echo "📦 Upload completed for version: ${VERSION_TAG}"
 
   # ==========================================
-  # JOB 7: NOTIFICATION ET RÉSUMÉ (Amélioré)
+  # JOB 7: NOTIFICATION ET RÉSUMÉ
   # ==========================================
   notify-front-1:
     name: "Pipeline Summary"
@@ -505,7 +280,6 @@ jobs:
     - name: Pipeline Results Summary
       run: |
         echo "## 🚀 Pipeline CI/CD Results - simplon-finance4all-front-1" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📊 Job Status:" >> $GITHUB_STEP_SUMMARY
         echo "- 🧪 **Tests**: ${{ needs.test-front-1.result }}" >> $GITHUB_STEP_SUMMARY
         echo "- 🏗️ **Build**: ${{ needs.build-front-1.result }}" >> $GITHUB_STEP_SUMMARY
@@ -519,35 +293,3 @@ jobs:
         echo "- Build artifacts (dist/)" >> $GITHUB_STEP_SUMMARY
         echo "- Docker image: ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
         echo "- Security scan results" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Build ID**: ${{ github.run_number }} | **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Branch**: ${{ github.ref_name }} | **Actor**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # Status summary
-        if [[ "${{ needs.test-front-1.result }}" == "success" && "${{ needs.build-front-1.result }}" == "success" && "${{ needs.docker-build-front-1.result }}" == "success" ]]; then
-          echo "### ✅ Pipeline Status: **SUCCESS**" >> $GITHUB_STEP_SUMMARY
-          echo "All critical jobs completed successfully!" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "### ❌ Pipeline Status: **FAILED**" >> $GITHUB_STEP_SUMMARY
-          echo "One or more critical jobs failed. Check the logs above." >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        # SonarQube specific feedback
-        if [[ "${{ needs.quality-analysis-front-1.result }}" == "failure" ]]; then
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ⚠️ SonarQube Analysis Issues" >> $GITHUB_STEP_SUMMARY
-          echo "Check the Quality Analysis job logs for:" >> $GITHUB_STEP_SUMMARY
-          echo "- Missing SONAR_TOKEN secret" >> $GITHUB_STEP_SUMMARY
-          echo "- Network connectivity to SonarQube server" >> $GITHUB_STEP_SUMMARY
-          echo "- Token permissions in SonarQube" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🔗 [SonarQube Server](${{ env.SONAR_HOST_URL }})" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        # Links utiles
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 🔗 Useful Links:" >> $GITHUB_STEP_SUMMARY
-        echo "- [SonarQube Dashboard](${{ env.SONAR_HOST_URL }}/dashboard?id=simplon-finance4all-front-1)" >> $GITHUB_STEP_SUMMARY
-        echo "- [Repository](https://github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY
-        echo "- [Commit Details](https://github.com/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
