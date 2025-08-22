@@ -156,7 +156,7 @@ jobs:
         retention-days: 30
 
   # ==========================================
-  # JOB 5: QUALITY ANALYSIS (Corrigé)
+  # JOB 5: QUALITY ANALYSIS (Avec Debug)
   # ==========================================
   quality-analysis-front-1:
     name: "Code Quality"
@@ -184,24 +184,99 @@ jobs:
         if [ ! -f sonar-project.properties ]; then
           echo "Creating sonar-project.properties..."
           cat > sonar-project.properties << EOF
-        # Configuration SonarQube
+        # Configuration SonarQube pour Finance4All Front-1
         sonar.projectKey=simplon-finance4all-front-1
         sonar.organization=simplon-finance4all
         sonar.projectName=Finance4All Front-1
         sonar.projectVersion=1.0.0
         
-        # Sources
+        # Sources et exclusions
         sonar.sources=src
-        sonar.exclusions=**/*.test.js,**/*.test.ts,**/node_modules/**,**/dist/**,**/*.spec.js,**/*.spec.ts
+        sonar.exclusions=**/*.test.js,**/*.test.ts,**/node_modules/**,**/dist/**,**/*.spec.js,**/*.spec.ts,**/*.config.js,**/*.config.ts,**/public/**
         
-        # Language
+        # Tests et coverage
+        sonar.tests=src
+        sonar.test.inclusions=**/*.test.js,**/*.test.ts,**/*.spec.js,**/*.spec.ts
         sonar.javascript.lcov.reportPaths=coverage/lcov.info
         sonar.typescript.lcov.reportPaths=coverage/lcov.info
         
+        # Configuration TypeScript/JavaScript
+        sonar.typescript.node.maxspace=4096
+        
         # Host URL
         sonar.host.url=http://161.97.89.159:9000
+        
+        # Encodage
+        sonar.sourceEncoding=UTF-8
+        
+        # Duplication
+        sonar.cpd.exclusions=**/*.test.js,**/*.test.ts,**/*.spec.js,**/*.spec.ts
         EOF
+        else
+          echo "✅ sonar-project.properties already exists"
         fi
+        
+        echo "📄 Current sonar-project.properties content:"
+        cat sonar-project.properties
+    
+    - name: Debug SonarQube Connection
+      run: |
+        echo "🔍 === SonarQube Connection Debug ==="
+        echo "Server URL: http://161.97.89.159:9000"
+        echo "Timestamp: $(date)"
+        echo ""
+        
+        # Test server accessibility
+        echo "1️⃣ Testing server accessibility..."
+        if curl -s --connect-timeout 10 http://161.97.89.159:9000/api/system/status; then
+          echo "✅ Server is accessible"
+        else
+          echo "❌ Server is not accessible"
+          echo "Network might be blocked or server is down"
+        fi
+        echo ""
+        
+        # Check if token is set
+        echo "2️⃣ Checking token configuration..."
+        if [ -n "$SONAR_TOKEN" ]; then
+          echo "✅ SONAR_TOKEN is set (length: ${#SONAR_TOKEN})"
+          echo "Token prefix: ${SONAR_TOKEN:0:10}..."
+        else
+          echo "❌ SONAR_TOKEN is not set"
+          exit 1
+        fi
+        echo ""
+        
+        # Test authentication
+        echo "3️⃣ Testing authentication..."
+        AUTH_RESPONSE=$(curl -s -w "%{http_code}" -u "${SONAR_TOKEN}:" http://161.97.89.159:9000/api/authentication/validate)
+        HTTP_CODE="${AUTH_RESPONSE: -3}"
+        RESPONSE_BODY="${AUTH_RESPONSE%???}"
+        
+        echo "HTTP Status Code: $HTTP_CODE"
+        echo "Response: $RESPONSE_BODY"
+        
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "✅ Authentication successful"
+        else
+          echo "❌ Authentication failed"
+          echo "This might indicate:"
+          echo "  - Invalid or expired token"
+          echo "  - Insufficient permissions"
+          echo "  - Server configuration issue"
+        fi
+        echo ""
+        
+        # Test server version
+        echo "4️⃣ Getting server information..."
+        VERSION_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" http://161.97.89.159:9000/api/server/version 2>/dev/null || echo "Failed to get version")
+        echo "Server version: $VERSION_RESPONSE"
+        echo ""
+        
+        echo "🏁 Debug completed"
+        
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         
     - name: SonarQube Scan
       uses: sonarsource/sonarqube-scan-action@master
@@ -345,4 +420,10 @@ jobs:
         else
           echo "### ❌ Pipeline Status: **FAILED**" >> $GITHUB_STEP_SUMMARY
           echo "One or more critical jobs failed. Check the logs above." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # SonarQube specific feedback
+        if [[ "${{ needs.quality-analysis-front-1.result }}" == "failure" ]]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**⚠️ SonarQube Analysis**: Check the debug logs in the Quality Analysis job for connection issues." >> $GITHUB_STEP_SUMMARY
         fi
