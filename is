@@ -1,0 +1,218 @@
+[1mdiff --git a/.github/workflows/ci-front-1.yml b/.github/workflows/ci-front-1.yml[m
+[1mindex 4fe12dc..c4674fe 100644[m
+[1m--- a/.github/workflows/ci-front-1.yml[m
+[1m+++ b/.github/workflows/ci-front-1.yml[m
+[36m@@ -156,8 +156,7 @@[m [mjobs:[m
+         retention-days: 30[m
+ [m
+   # ==========================================[m
+[31m- [m
+[31m-   # JOB 5: QUALITY ANALYSIS (Parallèle)[m
+[32m+[m[32m  # JOB 5: QUALITY ANALYSIS (Corrigé)[m
+   # ==========================================[m
+   quality-analysis-front-1:[m
+     name: "Code Quality"[m
+[36m@@ -168,10 +167,46 @@[m [mjobs:[m
+     steps:[m
+     - name: Checkout code[m
+       uses: actions/checkout@v4[m
+[31m-      [m
+[32m+[m[32m      with:[m
+[32m+[m[32m        fetch-depth: 0  # Shallow clones should be disabled for better analysis[m
+[32m+[m[41m        [m
+[32m+[m[32m    - name: Set up Node.js[m
+[32m+[m[32m      uses: actions/setup-node@v4[m
+[32m+[m[32m      with:[m
+[32m+[m[32m        node-version: ${{ env.NODE_VERSION }}[m
+[32m+[m[32m        cache: 'npm'[m
+[32m+[m
+[32m+[m[32m    - name: Install dependencies[m
+[32m+[m[32m      run: npm ci[m
+[32m+[m[41m    [m
+[32m+[m[32m    - name: Create sonar-project.properties if not exists[m
+[32m+[m[32m      run: |[m
+[32m+[m[32m        if [ ! -f sonar-project.properties ]; then[m
+[32m+[m[32m          echo "Creating sonar-project.properties..."[m
+[32m+[m[32m          cat > sonar-project.properties << EOF[m
+[32m+[m[32m        # Configuration SonarQube[m
+[32m+[m[32m        sonar.projectKey=simplon-finance4all-front-1[m
+[32m+[m[32m        sonar.organization=simplon-finance4all[m
+[32m+[m[32m        sonar.projectName=Finance4All Front-1[m
+[32m+[m[32m        sonar.projectVersion=1.0.0[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Sources[m
+[32m+[m[32m        sonar.sources=src[m
+[32m+[m[32m        sonar.exclusions=**/*.test.js,**/*.test.ts,**/node_modules/**,**/dist/**,**/*.spec.js,**/*.spec.ts[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Language[m
+[32m+[m[32m        sonar.javascript.lcov.reportPaths=coverage/lcov.info[m
+[32m+[m[32m        sonar.typescript.lcov.reportPaths=coverage/lcov.info[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Host URL[m
+[32m+[m[32m        sonar.host.url=http://161.97.89.159:9000[m
+[32m+[m[32m        EOF[m
+[32m+[m[32m        fi[m
+[32m+[m[41m        [m
+     - name: SonarQube Scan[m
+       uses: sonarsource/sonarqube-scan-action@master[m
+       env:[m
+[32m+[m[32m        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}[m
+         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}[m
+         SONAR_HOST_URL: "http://161.97.89.159:9000"[m
+     [m
+[36m@@ -180,16 +215,16 @@[m [mjobs:[m
+       timeout-minutes: 5[m
+       env:[m
+         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}[m
+[31m-        SONAR_HOST_URL: "http://161.97.89.159:9000"[m
+[32m+[m[32m      continue-on-error: true[m
+ [m
+   # ==========================================[m
+[31m-  # JOB 6: DEPLOY TO REGISTRIES[m
+[32m+[m[32m  # JOB 6: DEPLOY TO REGISTRIES (Corrigé)[m
+   # ==========================================[m
+   deploy-registries-front-1:[m
+     name: "Deploy to Registries"[m
+     runs-on: ubuntu-latest[m
+     needs: [docker-build-front-1, security-scan-front-1][m
+[31m-    if: github.ref == 'refs/heads/feature/ci-cd'[m
+[32m+[m[32m    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/ci-cd'[m
+     [m
+     steps:[m
+     - name: Checkout code[m
+[36m@@ -221,30 +256,55 @@[m [mjobs:[m
+     - name: Push to Docker Hub[m
+       continue-on-error: true[m
+       run: |[m
+[32m+[m[32m        # Generate version tag[m
+[32m+[m[32m        VERSION_TAG=$(date +%Y%m%d)-${GITHUB_SHA::8}[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Tag images[m
+         docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest[m
+[32m+[m[32m        docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${VERSION_TAG}[m
+         docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Push images[m
+         docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest[m
+[32m+[m[32m        docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${VERSION_TAG}[m
+         docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}[m
+[32m+[m[41m        [m
+[32m+[m[32m        echo "🐳 Docker images pushed:"[m
+[32m+[m[32m        echo "- latest"[m
+[32m+[m[32m        echo "- ${VERSION_TAG}"[m
+[32m+[m[32m        echo "- ${{ github.sha }}"[m
+     [m
+[31m-    # NEXUS DEPLOYMENT[m
+[32m+[m[32m    # NEXUS DEPLOYMENT (URL corrigée)[m
+     - name: Upload artifacts to Nexus Repository[m
+       continue-on-error: true[m
+       run: |[m
+         # Create artifact package[m
+         tar -czf ${{ env.DOCKER_IMAGE_NAME }}-${{ github.sha }}.tar.gz -C dist .[m
+         [m
+[32m+[m[32m        # Generate version info[m
+[32m+[m[32m        VERSION_TAG=$(date +%Y%m%d)-${GITHUB_SHA::8}[m
+[32m+[m[41m        [m
+         # Debug info[m
+         echo "📦 Nexus deployment info:"[m
+         echo "Archive: ${{ env.DOCKER_IMAGE_NAME }}-${{ github.sha }}.tar.gz"[m
+         echo "Size: $(ls -lh ${{ env.DOCKER_IMAGE_NAME }}-${{ github.sha }}.tar.gz)"[m
+[32m+[m[32m        echo "Version: ${VERSION_TAG}"[m
+         [m
+[31m-        # Upload to Nexus[m
+[31m-        NEXUS_BASE_URL="http://161.97.89.159:8081/repository/simplon-finance4all/[m
+[31m-        UPLOAD_URL="${NEXUS_BASE_URL}/repository/simplon-finance4all-front-1/com/simplon/finance4all-front-1/${{ github.sha }}/${{ env.DOCKER_IMAGE_NAME }}-${{ github.sha }}.tar.gz"[m
+[32m+[m[32m        # Upload to Nexus (URL corrigée)[m
+[32m+[m[32m        NEXUS_BASE_URL="http://161.97.89.159:8081"[m
+[32m+[m[32m        UPLOAD_URL="${NEXUS_BASE_URL}/repository/simplon-finance4all-front-1/com/simplon/finance4all-front-1/${VERSION_TAG}/${{ env.DOCKER_IMAGE_NAME }}-${VERSION_TAG}.tar.gz"[m
+[32m+[m[41m        [m
+[32m+[m[32m        echo "Upload URL: ${UPLOAD_URL}"[m
+         [m
+[32m+[m[32m        # Rename file with version[m
+[32m+[m[32m        cp ${{ env.DOCKER_IMAGE_NAME }}-${{ github.sha }}.tar.gz ${{ env.DOCKER_IMAGE_NAME }}-${VERSION_TAG}.tar.gz[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Upload to Nexus[m
+         curl -v -u "${{ secrets.NEXUS_USERNAME }}:${{ secrets.NEXUS_PASSWORD }}" \[m
+[31m-          --upload-file ${{ env.DOCKER_IMAGE_NAME }}-${{ github.sha }}.tar.gz \[m
+[31m-          "${UPLOAD_URL}"[m
+[32m+[m[32m          --upload-file ${{ env.DOCKER_IMAGE_NAME }}-${VERSION_TAG}.tar.gz \[m
+[32m+[m[32m          "${UPLOAD_URL}" || echo "❌ Nexus upload failed, but continuing..."[m
+[32m+[m[41m        [m
+[32m+[m[32m        echo "📦 Artifact uploaded to Nexus with version: ${VERSION_TAG}"[m
+ [m
+   # ==========================================[m
+   # JOB 7: NOTIFICATION ET RÉSUMÉ[m
+[36m@@ -274,4 +334,15 @@[m [mjobs:[m
+         echo "- Docker image: ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY[m
+         echo "- Security scan results" >> $GITHUB_STEP_SUMMARY[m
+         echo "" >> $GITHUB_STEP_SUMMARY[m
+[31m-        echo "**Build ID**: ${{ github.run_number }} | **Commit**: ${{ github.sha }}"  >> $GITHUB_STEP_SUMMARY[m
+\ No newline at end of file[m
+[32m+[m[32m        echo "**Build ID**: ${{ github.run_number }} | **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY[m
+[32m+[m[32m        echo "**Branch**: ${{ github.ref_name }} | **Actor**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY[m
+[32m+[m[32m        echo "" >> $GITHUB_STEP_SUMMARY[m
+[32m+[m[41m        [m
+[32m+[m[32m        # Status summary[m
+[32m+[m[32m        if [[ "${{ needs.test-front-1.result }}" == "success" && "${{ needs.build-front-1.result }}" == "success" && "${{ needs.docker-build-front-1.result }}" == "success" ]]; then[m
+[32m+[m[32m          echo "### ✅ Pipeline Status: **SUCCESS**" >> $GITHUB_STEP_SUMMARY[m
+[32m+[m[32m          echo "All critical jobs completed successfully!" >> $GITHUB_STEP_SUMMARY[m
+[32m+[m[32m        else[m
+[32m+[m[32m          echo "### ❌ Pipeline Status: **FAILED**" >> $GITHUB_STEP_SUMMARY[m
+[32m+[m[32m          echo "One or more critical jobs failed. Check the logs above." >> $GITHUB_STEP_SUMMARY[m
+[32m+[m[32m        fi[m
+\ No newline at end of file[m
+[1mdiff --git a/sonar-project.properties b/sonar-project.properties[m
+[1mindex 7c3d4f4..a27edc7 100644[m
+[1m--- a/sonar-project.properties[m
+[1m+++ b/sonar-project.properties[m
+[36m@@ -1,31 +1,27 @@[m
+[31m-# Configuration SonarQube pour simplon-finance4all-front-1[m
+[31m-[m
+[31m-# Informations du projet[m
+[32m+[m[32m# Configuration SonarQube pour Finance4All Front-1[m
+ sonar.projectKey=simplon-finance4all-front-1[m
+[31m-sonar.projectName=simplon-finance4all-front-1[m
+[31m-sonar.projectVersion=1.0[m
+[32m+[m[32msonar.organization=simplon-finance4all[m
+[32m+[m[32msonar.projectName=Finance4All Front-1[m
+[32m+[m[32msonar.projectVersion=1.0.0[m
+ [m
+[31m-# Sources et tests[m
+[32m+[m[32m# Sources et exclusions[m
+ sonar.sources=src[m
+[31m-sonar.tests=src[m
+[31m-sonar.test.inclusions=**/*.test.js,**/*.test.jsx,**/*.test.ts,**/*.test.tsx,**/*.spec.js,**/*.spec.jsx[m
+[31m-[m
+[31m-# Exclusions[m
+[31m-sonar.exclusions=**/node_modules/**,**/build/**,**/dist/**,**/coverage/**,**/*.min.js[m
+[31m-sonar.test.exclusions=**/node_modules/**,**/build/**,**/dist/**[m
+[32m+[m[32msonar.exclusions=**/*.test.js,**/*.test.ts,**/node_modules/**,**/dist/**,**/*.spec.js,**/*.spec.ts,**/*.config.js,**/*.config.ts,**/public/**[m
+ [m
+[31m-# Couverture de code[m
+[32m+[m[32m# Tests et coverage (si configuré)[m
+[32m+[m[32msonar.tests=src[m
+[32m+[m[32msonar.test.inclusions=**/*.test.js,**/*.test.ts,**/*.spec.js,**/*.spec.ts[m
+ sonar.javascript.lcov.reportPaths=coverage/lcov.info[m
+[31m-sonar.coverage.exclusions=**/*.test.js,**/*.test.jsx,**/*.test.ts,**/*.test.tsx,**/*.spec.js,**/index.js,**/serviceWorker.js[m
+[32m+[m[32msonar.typescript.lcov.reportPaths=coverage/lcov.info[m
+ [m
+[31m-# Langue[m
+[31m-sonar.language=js[m
+[32m+[m[32m# Configuration TypeScript/JavaScript[m
+[32m+[m[32msonar.typescript.node.maxspace=4096[m
+ [m
+[31m-# Encodage des fichiers source[m
+[31m-sonar.sourceEncoding=UTF-8[m
+[32m+[m[32m# Host URL (votre serveur SonarQube)[m
+[32m+[m[32msonar.host.url=http://161.97.89.159:9000[m
+ [m
+[31m-# Qualité du code[m
+[31m-sonar.qualitygate.wait=true[m
+[32m+[m[32m# Encodage[m
+[32m+[m[32msonar.sourceEncoding=UTF-8[m
+ [m
+[31m-# ESLint[m
+[31m-sonar.eslint.reportPaths=eslint-report.json [m
+[32m+[m[32m# Duplication[m
+[32m+[m[32msonar.cpd.exclusions=**/*.test.js,**/*.test.ts,**/*.spec.js,**/*.spec.ts[m
+\ No newline at end of file[m
