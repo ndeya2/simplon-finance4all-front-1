@@ -131,16 +131,18 @@ jobs:
         run: npm ci
 
       - name: Verify SonarQube Token
+        continue-on-error: true
         run: |
           if [ -z "${{ secrets.SONAR_TOKEN }}" ]; then
-            echo "❌ SONAR_TOKEN secret is not configured"
+            echo "⚠️ SONAR_TOKEN secret is not configured"
+            echo "SonarQube analysis will be skipped"
             echo "Please add SONAR_TOKEN to your GitHub repository secrets"
-            exit 1
           else
             echo "✅ SONAR_TOKEN is configured"
           fi
 
       - name: SonarQube Scan
+        if: ${{ secrets.SONAR_TOKEN != '' }}
         uses: sonarsource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # 🔑 Token ajouté dans GitHub Secrets
@@ -153,6 +155,7 @@ jobs:
             -Dsonar.projectVersion=1.0.0
 
       - name: SonarQube Quality Gate check
+        if: ${{ secrets.SONAR_TOKEN != '' }}
         uses: sonarsource/sonarqube-quality-gate-action@master
         timeout-minutes: 5
         env:
