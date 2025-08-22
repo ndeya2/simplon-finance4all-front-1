@@ -156,7 +156,8 @@ jobs:
         retention-days: 30
 
   # ==========================================
-  # JOB 5: QUALITY ANALYSIS (Parallèle)
+ 
+   # JOB 5: QUALITY ANALYSIS (Parallèle)
   # ==========================================
   quality-analysis-front-1:
     name: "Code Quality"
@@ -173,10 +174,7 @@ jobs:
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST_URL: "http://161.97.89.159:9000"
-
-      - name: Build project
-        run: npm run build
-        
+    
     - name: SonarQube Quality Gate check
       uses: sonarsource/sonarqube-quality-gate-action@master
       timeout-minutes: 5
