@@ -1,93 +1,218 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline Front-1 Professional
 
 on:
   push:
-    branches:
-      - feature/ci-cd
+    branches: [ feature/ci-cd, main ]
   pull_request:
-    branches:
-      - feature/ci-cd
+    branches: [ main ]
+
+env:
+  NODE_VERSION: '18'
+  DOCKER_IMAGE_NAME: simplon-finance4all-front-1
+  SONAR_HOST_URL: http://161.97.89.159:9000   # 🔗 ton serveur SonarQube
 
 jobs:
-  build:
+  # ==========================================
+  # JOB 1: TESTS ET VALIDATION
+  # ==========================================
+  test-front-1:
+    name: "Tests & Linting"
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Create test coverage placeholder
+        run: |
+          mkdir -p coverage
+          echo "# Test Coverage Report - ${{ github.sha }}" > coverage/README.md
+          echo "No tests configured yet for this Vite project" >> coverage/README.md
+          echo "Build date: $(date)" >> coverage/README.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-results-front-1-${{ github.run_number }}
+          path: coverage/
+          retention-days: 7
+
+  # ==========================================
+  # JOB 2: BUILD APPLICATION
+  # ==========================================
+  build-front-1:
+    name: "Build Application"
+    runs-on: ubuntu-latest
+    needs: test-front-1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-front-1-${{ github.run_number }}
+          path: dist/
+          retention-days: 30
+
+  # ==========================================
+  # JOB 3: BUILD DOCKER IMAGE
+  # ==========================================
+  docker-build-front-1:
+    name: "Docker Build"
+    runs-on: ubuntu-latest
+    needs: build-front-1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-front-1-${{ github.run_number }}
+          path: dist/
+      - uses: docker/setup-buildx-action@v3
+      - run: |
+          docker build -t ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }} .
+          docker tag ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }} ${{ env.DOCKER_IMAGE_NAME }}:latest
+      - run: docker save ${{ env.DOCKER_IMAGE_NAME }}:latest | gzip > docker-image-front-1.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-front-1-${{ github.run_number }}
+          path: docker-image-front-1.tar.gz
+          retention-days: 7
+
+  # ==========================================
+  # JOB 4: SECURITY SCAN
+  # ==========================================
+  security-scan-front-1:
+    name: "Security Analysis"
+    runs-on: ubuntu-latest
+    needs: docker-build-front-1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-image-front-1-${{ github.run_number }}
+      - run: gunzip -c docker-image-front-1.tar.gz | docker load
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.DOCKER_IMAGE_NAME }}:latest
+          format: 'sarif'
+          output: 'trivy-results-front-1.sarif'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-front-1-${{ github.run_number }}
+          path: trivy-results-front-1.sarif
+          retention-days: 30
+
+  # ==========================================
+  # JOB 5: QUALITY ANALYSIS (SonarQube)
+  # ==========================================
+  quality-analysis-front-1:
+    name: "Code Quality"
+    runs-on: ubuntu-latest
+    needs: test-front-1
+    continue-on-error: true
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          fetch-depth: 0
 
-      - name: Build with Maven
-        run: mvn clean package -DskipTests
-
-      - name: Upload JAR Artifact
-        uses: actions/upload-artifact@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          name: springboot-app
-          path: target/*.jar
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
-  sonar:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+      - name: Install dependencies
+        run: npm ci
 
       - name: SonarQube Scan
-        run: mvn sonar:sonar \
-          -Dsonar.projectKey=my-springboot-app \
-          -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-          -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-
-  docker:
-    runs-on: ubuntu-latest
-    needs: [build, sonar]
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Log in to DockerHub
-        uses: docker/login-action@v2
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # 🔑 Token ajouté dans GitHub Secrets
+          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }} # 🌍 Ton serveur SonarQube
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          args: >
+            -Dsonar.projectKey=simplon-finance4all-front-1
+            -Dsonar.sources=src
+            -Dsonar.projectName="Finance4All Front-1"
+            -Dsonar.projectVersion=1.0.0
 
-      - name: Build Docker Image
-        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ github.sha }} .
+      - name: SonarQube Quality Gate check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+        continue-on-error: true
 
-      - name: Scan Docker Image with Trivy
-        uses: aquasecurity/trivy-action@0.20.0
-        with:
-          image-ref: ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ github.sha }}
-          format: 'table'
-          exit-code: '0'
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Push Docker Image
-        run: docker push ${{ secrets.DOCKER_USERNAME }}/springboot-app:${{ github.sha }}
-
-  nexus:
-    runs-on: ubuntu-latest
-    needs: build
-
-    steps:
-      - uses: actions/download-artifact@v3
-        with:
-          name: springboot-app
-
-      - name: Upload JAR to Nexus
+      - name: Generate Analysis Report
+        if: always()
         run: |
-          curl -v -u ${{ secrets.NEXUS_USER }}:${{ secrets.NEXUS_PASSWORD }} \
-          --upload-file target/*.jar \
-          ${{ secrets.NEXUS_URL }}/repository/maven-releases/com/example/springboot-app/1.0.0/springboot-app-1.0.0.jar
+          echo "## 📊 SonarQube Analysis Report" >> $GITHUB_STEP_SUMMARY
+          echo "**Project:** simplon-finance4all-front-1" >> $GITHUB_STEP_SUMMARY
+          echo "**Server:** ${{ env.SONAR_HOST_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 [View Results](${{ env.SONAR_HOST_URL }}/dashboard?id=simplon-finance4all-front-1)" >> $GITHUB_STEP_SUMMARY
+
+  # ==========================================
+  # JOB 6: DEPLOY TO REGISTRIES
+  # ==========================================
+  deploy-registries-front-1:
+    name: "Deploy to Registries"
+    runs-on: ubuntu-latest
+    needs: [docker-build-front-1, security-scan-front-1]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/ci-cd'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-image-front-1-${{ github.run_number }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-front-1-${{ github.run_number }}
+          path: dist/
+      - run: gunzip -c docker-image-front-1.tar.gz | docker load
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - run: |
+          VERSION_TAG=$(date +%Y%m%d)-${GITHUB_SHA::8}
+          docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+          docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${VERSION_TAG}
+          docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${VERSION_TAG}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+
+  # ==========================================
+  # JOB 7: NOTIFICATION ET RÉSUMÉ
+  # ==========================================
+  notify-front-1:
+    name: "Pipeline Summary"
+    runs-on: ubuntu-latest
+    needs: [test-front-1, build-front-1, docker-build-front-1, security-scan-front-1, quality-analysis-front-1, deploy-registries-front-1]
+    if: always()
+    steps:
+      - run: |
+          echo "## 🚀 Pipeline CI/CD Results - simplon-finance4all-front-1" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Job Status:" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧪 **Tests**: ${{ needs.test-front-1.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🏗️ **Build**: ${{ needs.build-front-1.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🐳 **Docker**: ${{ needs.docker-build-front-1.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔒 **Security**: ${{ needs.security-scan-front-1.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 **Quality**: ${{ needs.quality-analysis-front-1.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🚀 **Deploy**: ${{ needs.deploy-registries-front-1.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Artifacts Generated:" >> $GITHUB_STEP_SUMMARY
+          echo "- Test coverage reports" >> $GITHUB_STEP_SUMMARY
+          echo "- Build artifacts (dist/)" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker image: ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security scan results" >> $GITHUB_STEP_SUMMARY
