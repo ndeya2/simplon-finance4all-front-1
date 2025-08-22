@@ -113,14 +113,25 @@ jobs:
     
     # ÉTAPE 7: DEPLOY TO NEXUS
     - name: Upload artifacts to Nexus Repository
+      continue-on-error: true
       run: |
         # Créer un package tar.gz des artifacts de build (Vite génère dans dist/)
         tar -czf simplon-finance4all-front-1-${{ github.sha }}.tar.gz -C dist .
         
-        # Upload vers Nexus
+        # Debug: Afficher les variables
+        echo "NEXUS_URL: ${{ secrets.NEXUS_URL }}"
+        echo "NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}"
+        echo "Archive created: simplon-finance4all-front-1-${{ github.sha }}.tar.gz"
+        
+        # Upload vers Nexus avec URL fixe
+        NEXUS_BASE_URL="http://161.97.89.159:8081"
+        UPLOAD_URL="${NEXUS_BASE_URL}/repository/simplon-finance4all-front-1/com/simplon/finance4all-front-1/${{ github.sha }}/simplon-finance4all-front-1-${{ github.sha }}.tar.gz"
+        
+        echo "Upload URL: ${UPLOAD_URL}"
+        
         curl -v -u "${{ secrets.NEXUS_USERNAME }}:${{ secrets.NEXUS_PASSWORD }}" \
           --upload-file simplon-finance4all-front-1-${{ github.sha }}.tar.gz \
-          "${{ secrets.NEXUS_URL }}/repository/simplon-finance4all-front-1/com/simplon/finance4all-front-1/${{ github.sha }}/simplon-finance4all-front-1-${{ github.sha }}.tar.gz"
+          "${UPLOAD_URL}"
     
     # ÉTAPE 8: NOTIFICATION ET RÉSUMÉ
     - name: Pipeline Summary
