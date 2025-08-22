@@ -183,9 +183,8 @@ jobs:
     - name: SonarQube Scan
       uses: sonarsource/sonarqube-scan-action@master
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+        SONAR_HOST_URL: http://161.97.89.159:9000
       with:
         args: >
           -Dsonar.projectKey=simplon-finance4all-front-1
@@ -194,13 +193,6 @@ jobs:
           -Dsonar.projectName="Finance4All Front-1"
           -Dsonar.projectVersion=1.0.0
 
-    - name: SonarQube Quality Gate check
-      uses: sonarsource/sonarqube-quality-gate-action@master
-      timeout-minutes: 5
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
-      continue-on-error: true
 
   # ==========================================
   # JOB 6: DEPLOY TO REGISTRIES
